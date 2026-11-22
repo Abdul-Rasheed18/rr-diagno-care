@@ -1,0 +1,94 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       xmlns:context="http://www.springframework.org/schema/context"
+       xmlns:tx="http://www.springframework.org/schema/tx"
+       xmlns:aop="http://www.springframework.org/schema/aop"
+       xmlns:security="http://www.springframework.org/schema/security"
+       xsi:schemaLocation="
+         http://www.springframework.org/schema/beans    http://www.springframework.org/schema/beans/spring-beans.xsd
+         http://www.springframework.org/schema/context  http://www.springframework.org/schema/context/spring-context.xsd
+         http://www.springframework.org/schema/tx       http://www.springframework.org/schema/tx/spring-tx.xsd
+         http://www.springframework.org/schema/aop      http://www.springframework.org/schema/aop/spring-aop.xsd
+         http://www.springframework.org/schema/security http://www.springframework.org/schema/security/spring-security.xsd">
+
+    <!-- ============ Root context: everything except web controllers ============ -->
+    <context:component-scan base-package="com.rrdiagnocare">
+        <context:exclude-filter type="annotation" expression="org.springframework.stereotype.Controller"/>
+        <context:exclude-filter type="annotation" expression="org.springframework.web.bind.annotation.ControllerAdvice"/>
+    </context:component-scan>
+
+    <!-- db.properties; JVM system properties (-Djdbc.password=...) take precedence -->
+    <context:property-placeholder location="classpath:db.properties"/>
+
+    <!-- ============ DataSource (HikariCP pool) ============ -->
+    <bean id="hikariConfig" class="com.zaxxer.hikari.HikariConfig">
+        <property name="poolName" value="RRDiagnoCarePool"/>
+        <property name="driverClassName" value="${jdbc.driverClassName}"/>
+        <property name="jdbcUrl" value="${jdbc.url}"/>
+        <property name="username" value="${jdbc.username}"/>
+        <property name="password" value="${jdbc.password}"/>
+        <property name="maximumPoolSize" value="${jdbc.pool.maxSize}"/>
+        <property name="minimumIdle" value="${jdbc.pool.minIdle}"/>
+        <property name="connectionTimeout" value="10000"/>
+        <!-- Let the app start even if MySQL is not up yet; the first query reports the error -->
+        <property name="initializationFailTimeout" value="-1"/>
+    </bean>
+    <bean id="dataSource" class="com.zaxxer.hikari.HikariDataSource" destroy-method="close">
+        <constructor-arg ref="hikariConfig"/>
+    </bean>
+
+    <bean id="jdbcTemplate" class="org.springframework.jdbc.core.JdbcTemplate">
+        <property name="dataSource" ref="dataSource"/>
+    </bean>
+    <bean id="namedParameterJdbcTemplate" class="org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate">
+        <constructor-arg ref="dataSource"/>
+    </bean>
+
+    <!-- ============ Transactions ============ -->
+    <bean id="transactionManager" class="org.springframework.jdbc.datasource.DataSourceTransactionManager">
+        <property name="dataSource" ref="dataSource"/>
+    </bean>
+    <tx:annotation-driven transaction-manager="transactionManager" proxy-target-class="true"/>
+
+    <!-- ============ AOP (@Aspect LabAuditAspect) ============ -->
+    <aop:aspectj-autoproxy proxy-target-class="true"/>
+
+    <!-- ============ Spring Security ============ -->
+    <bean id="passwordEncoder" class="org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder"/>
+
+    <security:http pattern="/assets/**" security="none"/>
+
+    <security:http auto-config="false" use-expressions="true">
+        <security:intercept-url pattern="/login" access="permitAll"/>
+        <security:intercept-url pattern="/register" access="permitAll"/>
+        <security:intercept-url pattern="/admin/**" access="hasRole('ADMIN')"/>
+        <security:intercept-url pattern="/staff/**" access="hasRole('STAFF')"/>
+        <security:intercept-url pattern="/patient/**" access="hasRole('PATIENT')"/>
+        <security:intercept-url pattern="/print/**" access="isAuthenticated()"/>
+        <security:intercept-url pattern="/**" access="permitAll"/>
+
+        <security:form-login login-page="/login"
+                             login-processing-url="/login"
+                             username-parameter="username"
+                             password-parameter="password"
+                             authentication-success-handler-ref="customAuthSuccessHandler"
+                             authentication-failure-url="/login?error=true"/>
+        <security:logout logout-url="/logout"
+                         logout-success-url="/login?logout=true"
+                         invalidate-session="true"
+                         delete-cookies="JSESSIONID"/>
+        <security:access-denied-handler error-page="/access-denied"/>
+        <security:session-management session-fixation-protection="migrateSession"/>
+        <security:headers>
+            <security:frame-options policy="SAMEORIGIN"/>
+        </security:headers>
+        <!-- CSRF protection is ON (default); every POST form carries ${_csrf.token} -->
+    </security:http>
+
+    <security:authentication-manager>
+        <security:authentication-provider user-service-ref="customUserDetailsService">
+            <security:password-encoder ref="passwordEncoder"/>
+        </security:authentication-provider>
+    </security:authentication-manager>
+</beans>

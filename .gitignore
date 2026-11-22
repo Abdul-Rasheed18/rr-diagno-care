@@ -1,0 +1,17 @@
+# Build output
+target/
+*.war
+*.class
+
+# IntelliJ IDEA
+.idea/
+*.iml
+out/
+
+# Logs
+*.log
+logs/
+
+# OS
+.DS_Store
+Thumbs.db
