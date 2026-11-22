@@ -124,7 +124,8 @@
             <page-encoding>UTF-8</page-encoding>
             <scripting-invalid>true</scripting-invalid>
             <include-prelude>/WEB-INF/views/common/taglibs.jspf</include-prelude>
-            <trim-directive-whitespaces>true</trim-directive-whitespaces>
+            <!-- NOTE: trim-directive-whitespaces is intentionally NOT enabled: it removes the single space
+                 between two adjacent EL expressions, e.g. class="${a} ${b}" would render as "ab". -->
         </jsp-property-group>
     </jsp-config>
 
